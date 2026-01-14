@@ -132,7 +132,7 @@ const resolvers = {
         });
       }
 
-      const existingVote = await Vote.findOne({
+      let existingVote = await Vote.findOne({
         user: context.currentUser.id,
         post: post.id,
       });
@@ -150,13 +150,25 @@ const resolvers = {
           value: args.value,
         });
 
-        await vote.save().catch((error) => {
+        try {
+          await vote.save();
+          inc[fieldFor(args.value)] = 1;
+        } catch (error) {
+          if (error.code === 11000) {
+            existingVote = await Vote.findOne({
+              user: context.currentUser.id,
+              post: post.id,
+            });
+
+            const currentPost = await Post.findById(post.id).populate("owner");
+            currentPost.userVote = existingVote?.value ?? null;
+            return currentPost;
+          }
+
           throw new GraphQLError("failed to save vote", {
             extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
           });
-        });
-
-        inc[fieldFor(args.value)] = 1;
+        }
       }
 
       // same vote value -> remove vote
@@ -190,7 +202,9 @@ const resolvers = {
         { new: true },
       ).populate("owner");
 
-      updatedPost.userVote = args.value;
+      updatedPost.userVote =
+        existingVote && existingVote.value === args.value ? null : args.value;
+
       return updatedPost;
     },
   },
