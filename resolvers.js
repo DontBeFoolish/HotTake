@@ -132,7 +132,7 @@ const resolvers = {
         });
       }
 
-      let existingVote = await Vote.findOne({
+      const existingVote = await Vote.findOne({
         user: context.currentUser.id,
         post: post.id,
       });
@@ -141,6 +141,7 @@ const resolvers = {
         value === "AGREE" ? "votes.agree" : "votes.disagree";
 
       let inc = {};
+      let finalUserVote = null;
 
       // vote doesn't exist -> add vote
       if (!existingVote) {
@@ -150,25 +151,14 @@ const resolvers = {
           value: args.value,
         });
 
-        try {
-          await vote.save();
-          inc[fieldFor(args.value)] = 1;
-        } catch (error) {
-          if (error.code === 11000) {
-            existingVote = await Vote.findOne({
-              user: context.currentUser.id,
-              post: post.id,
-            });
-
-            const currentPost = await Post.findById(post.id).populate("owner");
-            currentPost.userVote = existingVote?.value ?? null;
-            return currentPost;
-          }
-
+        await vote.save().catch((error) => {
           throw new GraphQLError("failed to save vote", {
             extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
           });
-        }
+        });
+
+        inc[fieldFor(args.value)] = 1;
+        finalUserVote = args.value;
       }
 
       // same vote value -> remove vote
@@ -180,6 +170,7 @@ const resolvers = {
         });
 
         inc[fieldFor(args.value)] = -1;
+        finalUserVote = null;
       }
 
       // opposite vote value -> switch vote
@@ -194,6 +185,7 @@ const resolvers = {
 
         inc[fieldFor(prevValue)] = -1;
         inc[fieldFor(args.value)] = 1;
+        finalUserVote = args.value;
       }
 
       const updatedPost = await Post.findByIdAndUpdate(
@@ -202,9 +194,7 @@ const resolvers = {
         { new: true },
       ).populate("owner");
 
-      updatedPost.userVote =
-        existingVote && existingVote.value === args.value ? null : args.value;
-
+      updatedPost.userVote = finalUserVote;
       return updatedPost;
     },
   },
