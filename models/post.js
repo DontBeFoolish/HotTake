@@ -1,17 +1,11 @@
 const mongoose = require("mongoose");
 
 const schema = mongoose.Schema({
-  title: {
+  content: {
     type: String,
     required: true,
-    minlength: 6,
-    maxlength: 150,
-  },
-  body: {
-    type: String,
-    required: true,
-    minlength: 6,
-    maxlength: 1000,
+    minlength: 10,
+    maxlength: 200,
   },
   votes: {
     agree: {

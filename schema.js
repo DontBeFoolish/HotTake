@@ -16,10 +16,11 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Post {
-    title: String!
-    body: String!
+    content: String!
     votes: VoteCount!
     owner: User!
+    controversyScore: Float!
+    userVote: VoteValue
     createdAt: String!
     id: ID!
   }
@@ -41,14 +42,13 @@ const typeDefs = /* GraphQL */ `
     findPost(postId: ID!): Post
     allUsers: [User!]!
     findUser(username: String!): User
-    allVotes: [Vote!]!
     me: User
   }
 
   type Mutation {
     addUser(username: String!, password: String!): User
     login(username: String!, password: String!): Token
-    addPost(title: String!, body: String!): Post
+    addPost(content: String!): Post
     removePost(postId: ID!): Boolean
     addVote(postId: ID!, value: VoteValue!): Post
     clearDb: Boolean

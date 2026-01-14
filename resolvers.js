@@ -1,8 +1,6 @@
-const { GraphQLError, graphql, GraphQLBoolean } = require("graphql");
+const { GraphQLError } = require("graphql");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
-
-const addVote = require("./services/voteService");
 
 const Post = require("./models/post");
 const User = require("./models/user");
@@ -10,13 +8,12 @@ const Vote = require("./models/vote");
 
 const resolvers = {
   Query: {
-    allUsers: async () => User.find({}),
-    findUser: async (root, args) => User.find({ username: args.username }),
-    allPosts: async () => Post.find({}),
+    me: (root, args, context) => context.currentUser,
+    allPosts: async () => Post.find({}).populate("owner"),
     findPost: async (root, args) =>
       Post.findById(args.postId).populate("owner"),
-    me: (root, args, context) => context.currentUser,
-    allVotes: async () => Vote.find({}),
+    allUsers: async () => User.find({}),
+    findUser: async (root, args) => User.findOne({ username: args.username }),
   },
   Mutation: {
     clearDb: async () => {
@@ -122,11 +119,96 @@ const resolvers = {
         });
       }
 
-      return addVote({
-        postId: args.postId,
-        userId: context.currentUser.id,
-        value: args.value,
+      if (args.value !== "AGREE" && args.value !== "DISAGREE") {
+        throw new GraphQLError("invalid vote value", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      const post = await Post.findById(args.postId);
+      if (!post) {
+        throw new GraphQLError("post not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      const existingVote = await Vote.findOne({
+        user: context.currentUser.id,
+        post: post.id,
       });
+
+      const fieldFor = (value) =>
+        value === "AGREE" ? "votes.agree" : "votes.disagree";
+
+      let inc = {};
+
+      // vote doesn't exist -> add vote
+      if (!existingVote) {
+        const vote = new Vote({
+          user: context.currentUser.id,
+          post: post.id,
+          value: args.value,
+        });
+
+        await vote.save().catch((error) => {
+          throw new GraphQLError("failed to save vote", {
+            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
+          });
+        });
+
+        inc[fieldFor(args.value)] = 1;
+      }
+
+      // same vote value -> remove vote
+      else if (existingVote.value === args.value) {
+        await existingVote.deleteOne().catch((error) => {
+          throw new GraphQLError("failed to delete vote", {
+            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
+          });
+        });
+
+        inc[fieldFor(args.value)] = -1;
+      }
+
+      // opposite vote value -> switch vote
+      else {
+        const prevValue = existingVote.value;
+        existingVote.value = args.value;
+        await existingVote.save().catch((error) => {
+          throw new GraphQLError("failed to update vote", {
+            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
+          });
+        });
+
+        inc[fieldFor(prevValue)] = -1;
+        inc[fieldFor(args.value)] = 1;
+      }
+
+      const updatedPost = await Post.findByIdAndUpdate(
+        args.postId,
+        { $inc: inc },
+        { new: true },
+      ).populate("owner");
+
+      updatedPost.userVote = args.value;
+      return updatedPost;
+    },
+  },
+  Post: {
+    controversyScore: (root) => {
+      const { agree, disagree } = root.votes;
+      if (agree === 0 && disagree === 0) return 0;
+      return Math.min(agree, disagree) / Math.max(agree, disagree);
+    },
+    userVote: async (root, _, context) => {
+      if (!context.currentUser) return null;
+
+      const vote = await Vote.findOne({
+        post: root.id,
+        user: context.currentUser.id,
+      });
+
+      return vote ? vote.value : null;
     },
   },
 };
