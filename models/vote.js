@@ -16,10 +16,6 @@ const schema = mongoose.Schema({
     enum: ["AGREE", "DISAGREE"],
     required: true,
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
 });
 
 schema.index({ user: 1, post: 1 }, { unique: true });

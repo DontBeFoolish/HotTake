@@ -1,6 +1,8 @@
-const { GraphQLError } = require("graphql");
+const { GraphQLError, graphql, GraphQLBoolean } = require("graphql");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
+
+const addVote = require("./services/voteService");
 
 const Post = require("./models/post");
 const User = require("./models/user");
@@ -8,21 +10,32 @@ const Vote = require("./models/vote");
 
 const resolvers = {
   Query: {
-    me: (root, args, context) => context.currentUser,
+    allUsers: async () => User.find({}),
+    findUser: async (root, args) => User.find({ username: args.username }),
     allPosts: async () => Post.find({}),
     findPost: async (root, args) =>
       Post.findById(args.postId).populate("owner"),
-    allUsers: async () => User.find({}),
-    findUser: async (root, args) => User.find({ username: args.username }),
+    me: (root, args, context) => context.currentUser,
+    allVotes: async () => Vote.find({}),
   },
   Mutation: {
+    clearDb: async () => {
+      await Post.deleteMany({});
+      await User.deleteMany({});
+      await Vote.deleteMany({});
+
+      return true;
+    },
     addUser: async (root, args) => {
       if (args.password.length < 8) {
         throw new GraphQLError("password minimum length of 8", {
-          extensions: {
-            code: "BAD_USER_INPUT",
-            invalidArgs: args.password,
-          },
+          extensions: { code: "BAD_USER_INPUT", invalidArgs: args.password },
+        });
+      }
+
+      if (await User.findOne({ username: args.username })) {
+        throw new GraphQLError("username already exists", {
+          extensions: { code: "BAD_USER_INPUT", invalidArgs: args.username },
         });
       }
 
@@ -35,12 +48,8 @@ const resolvers = {
       });
 
       return newUser.save().catch((error) => {
-        throw new GraphQLError(`failed to save user ${error.message}`, {
-          extensions: {
-            code: "BAD_USER_INPUT",
-            invalidArgs: args.username,
-            error,
-          },
+        throw new GraphQLError("failed to save user", {
+          extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
         });
       });
     },
@@ -63,13 +72,9 @@ const resolvers = {
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) };
     },
     addPost: async (root, args, context) => {
-      const user = await User.findById(context.currentUser.id);
-      if (!user) {
+      if (!context.currentUser) {
         throw new GraphQLError("must be logged in to create post", {
-          extensions: {
-            code: "UNAUTHENTICATED",
-            error,
-          },
+          extensions: { code: "UNAUTHENTICATED" },
         });
       }
 
@@ -81,14 +86,47 @@ const resolvers = {
 
       const savedPost = await newPost.save().catch((error) => {
         throw new GraphQLError("failed to create post", {
-          extensions: {
-            code: "BAD_USER_INPUT",
-            error,
-          },
+          extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
         });
       });
 
       return savedPost.populate("owner");
+    },
+    removePost: async (root, args, context) => {
+      if (!context.currentUser) {
+        throw new GraphQLError("no authentication", {
+          extensions: { code: "UNAUTHENTICATED" },
+        });
+      }
+
+      const post = await Post.findById(args.postId);
+      if (!post) {
+        throw new GraphQLError("post not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      if (post.owner.toString() !== context.currentUser.id) {
+        throw new GraphQLError("must be owner to delete", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      await post.deleteOne();
+      return true;
+    },
+    addVote: async (root, args, context) => {
+      if (!context.currentUser) {
+        throw new GraphQLError("no authentication", {
+          extensions: { code: "UNAUTHENTICATED" },
+        });
+      }
+
+      return addVote({
+        postId: args.postId,
+        userId: context.currentUser.id,
+        value: args.value,
+      });
     },
   },
 };

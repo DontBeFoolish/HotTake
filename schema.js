@@ -24,7 +24,7 @@ const typeDefs = /* GraphQL */ `
     id: ID!
   }
 
-  enum Value {
+  enum VoteValue {
     AGREE
     DISAGREE
   }
@@ -32,7 +32,7 @@ const typeDefs = /* GraphQL */ `
   type Vote {
     user: User!
     post: Post!
-    value: Value!
+    value: VoteValue!
     createdAt: String!
   }
 
@@ -41,6 +41,7 @@ const typeDefs = /* GraphQL */ `
     findPost(postId: ID!): Post
     allUsers: [User!]!
     findUser(username: String!): User
+    allVotes: [Vote!]!
     me: User
   }
 
@@ -48,6 +49,9 @@ const typeDefs = /* GraphQL */ `
     addUser(username: String!, password: String!): User
     login(username: String!, password: String!): Token
     addPost(title: String!, body: String!): Post
+    removePost(postId: ID!): Boolean
+    addVote(postId: ID!, value: VoteValue!): Post
+    clearDb: Boolean
   }
 `;
 
