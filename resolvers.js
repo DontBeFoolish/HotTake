@@ -125,77 +125,86 @@ const resolvers = {
         });
       }
 
-      const post = await Post.findById(args.postId);
-      if (!post) {
-        throw new GraphQLError("post not found", {
-          extensions: { code: "NOT_FOUND" },
-        });
-      }
+      const session = await Vote.startSession();
 
-      const existingVote = await Vote.findOne({
-        user: context.currentUser.id,
-        post: post.id,
-      });
+      try {
+        await session.startTransaction();
 
-      const fieldFor = (value) =>
-        value === "AGREE" ? "votes.agree" : "votes.disagree";
+        const post = await Post.findById(args.postId).session(session);
+        if (!post) {
+          throw new GraphQLError("post not found", {
+            extensions: { code: "NOT_FOUND" },
+          });
+        }
 
-      let inc = {};
-      let finalUserVote = null;
-
-      // vote doesn't exist -> add vote
-      if (!existingVote) {
-        const vote = new Vote({
+        const existingVote = await Vote.findOne({
           user: context.currentUser.id,
           post: post.id,
-          value: args.value,
-        });
+        }).session(session);
 
-        await vote.save().catch((error) => {
-          throw new GraphQLError("failed to save vote", {
-            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
+        const fieldFor = (value) =>
+          value === "AGREE" ? "votes.agree" : "votes.disagree";
+
+        let inc = {};
+        let finalUserVote = null;
+
+        // vote doesn't exist -> add vote
+        if (!existingVote) {
+          const vote = new Vote({
+            user: context.currentUser.id,
+            post: post.id,
+            value: args.value,
           });
+
+          await vote.save({ session });
+
+          inc[fieldFor(args.value)] = 1;
+          finalUserVote = args.value;
+        }
+
+        // same vote value -> remove vote
+        else if (existingVote.value === args.value) {
+          await existingVote.deleteOne({ session });
+
+          inc[fieldFor(args.value)] = -1;
+          finalUserVote = null;
+        }
+
+        // opposite vote value -> switch vote
+        else {
+          const prevValue = existingVote.value;
+          existingVote.value = args.value;
+
+          await existingVote.save({ session });
+
+          inc[fieldFor(prevValue)] = -1;
+          inc[fieldFor(args.value)] = 1;
+          finalUserVote = args.value;
+        }
+
+        const updatedPost = await Post.findByIdAndUpdate(
+          args.postId,
+          { $inc: inc },
+          { new: true, session },
+        ).populate("owner");
+
+        await session.commitTransaction();
+
+        updatedPost.userVote = finalUserVote;
+        return updatedPost;
+      } catch (error) {
+        await session.abortTransaction();
+
+        if (error instanceof GraphQLError) {
+          throw error;
+        }
+
+        throw new GraphQLError("failed to process vote", {
+          extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
         });
-
-        inc[fieldFor(args.value)] = 1;
-        finalUserVote = args.value;
+      } finally {
+        session.endSession();
       }
-
-      // same vote value -> remove vote
-      else if (existingVote.value === args.value) {
-        await existingVote.deleteOne().catch((error) => {
-          throw new GraphQLError("failed to delete vote", {
-            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
-          });
-        });
-
-        inc[fieldFor(args.value)] = -1;
-        finalUserVote = null;
-      }
-
-      // opposite vote value -> switch vote
-      else {
-        const prevValue = existingVote.value;
-        existingVote.value = args.value;
-        await existingVote.save().catch((error) => {
-          throw new GraphQLError("failed to update vote", {
-            extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
-          });
-        });
-
-        inc[fieldFor(prevValue)] = -1;
-        inc[fieldFor(args.value)] = 1;
-        finalUserVote = args.value;
-      }
-
-      const updatedPost = await Post.findByIdAndUpdate(
-        args.postId,
-        { $inc: inc },
-        { new: true },
-      ).populate("owner");
-
-      updatedPost.userVote = finalUserVote;
-      return updatedPost;
     },
   },
   Post: {
