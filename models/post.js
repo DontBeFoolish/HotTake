@@ -28,4 +28,6 @@ const schema = mongoose.Schema({
   },
 });
 
+schema.index({ content: "text" });
+
 module.exports = mongoose.model("Post", schema);

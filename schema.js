@@ -38,7 +38,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Query {
-    allPosts: [Post!]!
+    allPosts(content: String): [Post!]!
+    userPosts(ownerId: ID!): [Post!]!
     findPost(postId: ID!): Post
     allUsers: [User!]!
     findUser(username: String!): User

@@ -11,12 +11,21 @@ const pubsub = new PubSub();
 
 const resolvers = {
   Query: {
-    me: (root, args, context) => context.currentUser,
-    allPosts: async () => Post.find({}).populate("owner"),
+    allPosts: async (root, args) => {
+      if (args.content) {
+        return Post.find({ $text: { $search: args.content } }).populate(
+          "owner",
+        );
+      }
+      return Post.find({}).populate("owner");
+    },
+    userPosts: async (root, args) =>
+      Post.find({ owner: args.ownerId }).populate("owner"),
     findPost: async (root, args) =>
       Post.findById(args.postId).populate("owner"),
     allUsers: async () => User.find({}),
     findUser: async (root, args) => User.findOne({ username: args.username }),
+    me: (root, args, context) => context.currentUser,
   },
   Mutation: {
     clearDb: async () => {
@@ -89,6 +98,7 @@ const resolvers = {
         });
       });
       const populatedPost = await savedPost.populate("owner");
+
       pubsub.publish("POST_ADDED", { postAdded: populatedPost });
       return populatedPost;
     },
@@ -218,7 +228,7 @@ const resolvers = {
   Post: {
     controversyScore: (root) => {
       const { agree, disagree } = root.votes;
-      if (agree === 0 && disagree === 0) return 0;
+      if (agree === 0 && disagree === 0) return null;
       return Math.min(agree, disagree) / Math.max(agree, disagree);
     },
     userVote: async (root, _, context) => {
