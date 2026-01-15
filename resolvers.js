@@ -1,10 +1,13 @@
 const { GraphQLError } = require("graphql");
+const { PubSub } = require("graphql-subscriptions");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 
 const Post = require("./models/post");
 const User = require("./models/user");
 const Vote = require("./models/vote");
+
+const pubsub = new PubSub();
 
 const resolvers = {
   Query: {
@@ -76,8 +79,7 @@ const resolvers = {
       }
 
       const newPost = new Post({
-        title: args.title,
-        body: args.body,
+        content: args.content,
         owner: context.currentUser.id,
       });
 
@@ -86,8 +88,9 @@ const resolvers = {
           extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
         });
       });
-
-      return savedPost.populate("owner");
+      const populatedPost = await savedPost.populate("owner");
+      pubsub.publish("POST_ADDED", { postAdded: populatedPost });
+      return populatedPost;
     },
     removePost: async (root, args, context) => {
       if (!context.currentUser) {
@@ -205,6 +208,11 @@ const resolvers = {
       } finally {
         session.endSession();
       }
+    },
+  },
+  Subscription: {
+    postAdded: {
+      subscribe: () => pubsub.asyncIterableIterator("POST_ADDED"),
     },
   },
   Post: {

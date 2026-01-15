@@ -53,6 +53,10 @@ const typeDefs = /* GraphQL */ `
     addVote(postId: ID!, value: VoteValue!): Post
     clearDb: Boolean
   }
+
+  type Subscription {
+    postAdded: Post
+  }
 `;
 
 module.exports = typeDefs;
