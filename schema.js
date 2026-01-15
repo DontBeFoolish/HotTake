@@ -1,6 +1,18 @@
 const typeDefs = /* GraphQL */ `
+  enum UserRole {
+    USER
+    MODERATOR
+    ADMIN
+  }
+
+  enum VoteValue {
+    AGREE
+    DISAGREE
+  }
+
   type User {
     username: String!
+    role: UserRole!
     createdAt: String!
     id: ID!
   }
@@ -22,11 +34,6 @@ const typeDefs = /* GraphQL */ `
     userVote: VoteValue
     createdAt: String!
     id: ID!
-  }
-
-  enum VoteValue {
-    AGREE
-    DISAGREE
   }
 
   type Vote {
@@ -52,6 +59,7 @@ const typeDefs = /* GraphQL */ `
 
   type Mutation {
     addUser(username: String!, password: String!): User
+    setUserRole(userId: ID!, role: UserRole!): User
     login(username: String!, password: String!): Token
     addPost(content: String!): Post
     removePost(postId: ID!): Boolean

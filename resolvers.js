@@ -92,6 +92,23 @@ const resolvers = {
         });
       });
     },
+    setUserRole: async (root, args, context) => {
+      if (context.currentUser?.role !== "ADMIN") {
+        throw new GraphQLError("not authorized", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      const user = await User.findById(args.userId);
+      if (!user) {
+        throw new GraphQLError("invalid user id", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      user.role = args.role;
+      return user.save();
+    },
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username }).select(
         "+passwordHash",
@@ -148,7 +165,10 @@ const resolvers = {
         });
       }
 
-      if (post.owner.toString() !== context.currentUser.id) {
+      const isMod = ["MODERATOR", "ADMIN"].includes(context.currentUser.role);
+      const isOwner = context.currentUser.id === post.owner.toString();
+
+      if (!isMod && !isOwner) {
         throw new GraphQLError("must be owner to delete", {
           extensions: { code: "FORBIDDEN" },
         });
