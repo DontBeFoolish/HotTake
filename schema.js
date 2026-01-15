@@ -44,7 +44,7 @@ const typeDefs = /* GraphQL */ `
 
   type Query {
     allPosts(content: String, after: ID, limit: Int): PostConnection!
-    userPosts(ownerId: ID!): [Post!]!
+    userPosts(ownerId: ID!, after: ID, limit: Int): PostConnection!
     findPost(postId: ID!): Post
     allUsers: [User!]!
     findUser(username: String!): User

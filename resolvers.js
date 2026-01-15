@@ -12,7 +12,7 @@ const pubsub = new PubSub();
 const resolvers = {
   Query: {
     allPosts: async (root, args) => {
-      const limit = args.limit || 5;
+      const limit = args.limit || 20;
       const query = {};
 
       if (args.content) {
@@ -33,8 +33,24 @@ const resolvers = {
         nextCursor: posts.length === limit ? posts[posts.length - 1]._id : null,
       };
     },
-    userPosts: async (root, args) =>
-      Post.find({ owner: args.ownerId }).populate("owner"),
+    userPosts: async (root, args) => {
+      const limit = args.limit || 20;
+      const query = { owner: args.ownerId };
+
+      if (args.after) {
+        query._id = { $lt: args.after };
+      }
+
+      const posts = await Post.find(query)
+        .sort({ _id: -1 })
+        .limit(limit)
+        .populate("owner");
+
+      return {
+        posts,
+        nextCursor: posts.length === limit ? posts[posts.length - 1]._id : null,
+      };
+    },
     findPost: async (root, args) =>
       Post.findById(args.postId).populate("owner"),
     allUsers: async () => User.find({}),
