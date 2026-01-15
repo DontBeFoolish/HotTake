@@ -93,7 +93,9 @@ const resolvers = {
       });
     },
     login: async (root, args) => {
-      const user = await User.findOne({ username: args.username });
+      const user = await User.findOne({ username: args.username }).select(
+        "+passwordHash",
+      );
       if (
         !user ||
         !(await bcryptjs.compare(args.password, user.passwordHash))

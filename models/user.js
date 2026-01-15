@@ -10,6 +10,7 @@ const schema = mongoose.Schema({
   passwordHash: {
     type: String,
     required: true,
+    select: false,
   },
   createdAt: {
     type: Date,
