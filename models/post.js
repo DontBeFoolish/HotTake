@@ -28,6 +28,7 @@ const schema = mongoose.Schema({
   },
 });
 
+schema.index({ owner: 1 });
 schema.index({ content: "text" });
 
 module.exports = mongoose.model("Post", schema);

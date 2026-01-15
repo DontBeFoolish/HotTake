@@ -19,7 +19,7 @@ const typeDefs = /* GraphQL */ `
     content: String!
     votes: VoteCount!
     owner: User!
-    controversyScore: Float!
+    controversyScore: Float
     userVote: VoteValue
     createdAt: String!
     id: ID!
@@ -37,8 +37,13 @@ const typeDefs = /* GraphQL */ `
     createdAt: String!
   }
 
+  type PostConnection {
+    posts: [Post!]!
+    nextCursor: ID
+  }
+
   type Query {
-    allPosts(content: String): [Post!]!
+    allPosts(content: String, after: ID, limit: Int): PostConnection!
     userPosts(ownerId: ID!): [Post!]!
     findPost(postId: ID!): Post
     allUsers: [User!]!

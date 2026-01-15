@@ -12,12 +12,26 @@ const pubsub = new PubSub();
 const resolvers = {
   Query: {
     allPosts: async (root, args) => {
+      const limit = args.limit || 5;
+      const query = {};
+
       if (args.content) {
-        return Post.find({ $text: { $search: args.content } }).populate(
-          "owner",
-        );
+        query.$text = { $search: args.content };
       }
-      return Post.find({}).populate("owner");
+
+      if (args.after) {
+        query._id = { $lt: args.after };
+      }
+
+      const posts = await Post.find(query)
+        .sort({ _id: -1 })
+        .limit(limit)
+        .populate("owner");
+
+      return {
+        posts,
+        nextCursor: posts.length === limit ? posts[posts.length - 1]._id : null,
+      };
     },
     userPosts: async (root, args) =>
       Post.find({ owner: args.ownerId }).populate("owner"),
@@ -231,7 +245,7 @@ const resolvers = {
       if (agree === 0 && disagree === 0) return null;
       return Math.min(agree, disagree) / Math.max(agree, disagree);
     },
-    userVote: async (root, _, context) => {
+    userVote: async (root, args, context) => {
       if (!context.currentUser) return null;
 
       const vote = await Vote.findOne({
