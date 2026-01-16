@@ -12,30 +12,30 @@ const pubsub = new PubSub();
 const resolvers = {
   Query: {
     allPosts: async (root, args) => {
-      const limit = args.limit || 20;
-      const query = {};
-
-      if (args.content) {
-        query.$text = { $search: args.content };
-      }
+      const limit = 20;
+      const query = { deleted: false };
 
       if (args.after) {
         query._id = { $lt: args.after };
       }
 
+      // an additional post is queried to ensure more posts exist for the next query
       const posts = await Post.find(query)
         .sort({ _id: -1 })
-        .limit(limit)
+        .limit(limit + 1)
         .populate("owner");
 
+      const hasMore = posts.length > limit;
+      const sliced = hasMore ? posts.slice(0, limit) : posts;
+
       return {
-        posts,
-        nextCursor: posts.length === limit ? posts[posts.length - 1]._id : null,
+        posts: sliced,
+        nextCursor: hasMore ? sliced[sliced.length - 1]._id : null,
       };
     },
     userPosts: async (root, args) => {
-      const limit = args.limit || 20;
-      const query = { owner: args.ownerId };
+      const limit = 20;
+      const query = { deleted: false, owner: args.ownerId };
 
       if (args.after) {
         query._id = { $lt: args.after };
@@ -43,17 +43,31 @@ const resolvers = {
 
       const posts = await Post.find(query)
         .sort({ _id: -1 })
-        .limit(limit)
+        .limit(limit + 1)
         .populate("owner");
 
+      const hasMore = posts.length > limit;
+      const sliced = hasMore ? posts.slice(0, limit) : posts;
+
       return {
-        posts,
-        nextCursor: posts.length === limit ? posts[posts.length - 1]._id : null,
+        posts: sliced,
+        nextCursor: hasMore ? sliced[sliced.length - 1]._id : null,
       };
     },
-    findPost: async (root, args) =>
-      Post.findById(args.postId).populate("owner"),
-    allUsers: async () => User.find({}),
+    findPost: async (root, args) => {
+      return Post.findOne({
+        _id: args.postId,
+        deleted: false,
+      }).populate("owner");
+    },
+    allUsers: async (root, args, context) => {
+      if (context.currentUser?.role !== "ADMIN") {
+        throw new GraphQLError("not authorized", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+      return User.find({});
+    },
     findUser: async (root, args) => User.findOne({ username: args.username }),
     me: (root, args, context) => context.currentUser,
   },
@@ -66,20 +80,23 @@ const resolvers = {
       return true;
     },
     addUser: async (root, args) => {
-      if (args.password.length < 8) {
-        throw new GraphQLError("password minimum length of 8", {
-          extensions: { code: "BAD_USER_INPUT", invalidArgs: args.password },
-        });
-      }
-
       if (await User.findOne({ username: args.username })) {
         throw new GraphQLError("username already exists", {
           extensions: { code: "BAD_USER_INPUT", invalidArgs: args.username },
         });
       }
 
-      const hashRounds = 10;
-      const hashedPassword = await bcryptjs.hash(args.password, hashRounds);
+      const PASSWORD_REGEX =
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[^\s]{12,}$/;
+
+      if (!PASSWORD_REGEX.test(args.password)) {
+        throw new GraphQLError(
+          "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol",
+          { extensions: { code: "BAD_USER_INPUT" } },
+        );
+      }
+
+      const hashedPassword = await bcryptjs.hash(args.password, 10);
 
       const newUser = new User({
         username: args.username,
@@ -158,7 +175,11 @@ const resolvers = {
         });
       }
 
-      const post = await Post.findById(args.postId);
+      const post = await Post.findOne({
+        _id: args.postId,
+        deleted: false,
+      });
+
       if (!post) {
         throw new GraphQLError("post not found", {
           extensions: { code: "NOT_FOUND" },
@@ -174,8 +195,8 @@ const resolvers = {
         });
       }
 
-      await post.deleteOne();
-      return true;
+      post.deleted = true;
+      return post.save();
     },
     addVote: async (root, args, context) => {
       if (!context.currentUser) {
@@ -195,7 +216,11 @@ const resolvers = {
       try {
         await session.startTransaction();
 
-        const post = await Post.findById(args.postId).session(session);
+        const post = await Post.findOne({
+          _id: args.postId,
+          deleted: false,
+        }).session(session);
+
         if (!post) {
           throw new GraphQLError("post not found", {
             extensions: { code: "NOT_FOUND" },
@@ -248,10 +273,16 @@ const resolvers = {
         }
 
         const updatedPost = await Post.findByIdAndUpdate(
-          args.postId,
+          { _id: args.postId, deleted: false },
           { $inc: inc },
           { new: true, session },
         ).populate("owner");
+
+        if (!updatedPost) {
+          throw new GraphQLError("post does not exist", {
+            extensions: { code: "NOT_FOUND" },
+          });
+        }
 
         await session.commitTransaction();
 

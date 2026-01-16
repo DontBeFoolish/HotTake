@@ -21,6 +21,10 @@ const schema = mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  deleted: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 schema.index({ username: 1 }, { unique: true });

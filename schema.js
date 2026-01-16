@@ -14,6 +14,7 @@ const typeDefs = /* GraphQL */ `
     username: String!
     role: UserRole!
     createdAt: String!
+    deleted: Boolean!
     id: ID!
   }
 
@@ -33,6 +34,7 @@ const typeDefs = /* GraphQL */ `
     controversyScore: Float
     userVote: VoteValue
     createdAt: String!
+    deleted: Boolean!
     id: ID!
   }
 
@@ -49,8 +51,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Query {
-    allPosts(content: String, after: ID, limit: Int): PostConnection!
-    userPosts(ownerId: ID!, after: ID, limit: Int): PostConnection!
+    allPosts(after: ID): PostConnection!
+    userPosts(ownerId: ID!, after: ID): PostConnection!
     findPost(postId: ID!): Post
     allUsers: [User!]!
     findUser(username: String!): User
@@ -62,7 +64,7 @@ const typeDefs = /* GraphQL */ `
     setUserRole(userId: ID!, role: UserRole!): User
     login(username: String!, password: String!): Token
     addPost(content: String!): Post
-    removePost(postId: ID!): Boolean
+    removePost(postId: ID!): Post
     addVote(postId: ID!, value: VoteValue!): Post
     clearDb: Boolean
   }
