@@ -19,7 +19,6 @@ const resolvers = {
         query._id = { $lt: args.after };
       }
 
-      // an additional post is queried to ensure more posts exist for the next query
       const posts = await Post.find(query)
         .sort({ _id: -1 })
         .limit(limit + 1)
@@ -80,7 +79,7 @@ const resolvers = {
       return true;
     },
     addUser: async (root, args) => {
-      if (await User.findOne({ username: args.username })) {
+      if (await User.findOne({ username: args.username }, { _id: 1 })) {
         throw new GraphQLError("username already exists", {
           extensions: { code: "BAD_USER_INPUT", invalidArgs: args.username },
         });
@@ -158,11 +157,14 @@ const resolvers = {
         owner: context.currentUser.id,
       });
 
-      const savedPost = await newPost.save().catch((error) => {
+      const savedPost = await newPost.save();
+
+      if (!savedPost) {
         throw new GraphQLError("failed to create post", {
           extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
         });
-      });
+      }
+
       const populatedPost = await savedPost.populate("owner");
 
       pubsub.publish("POST_ADDED", { postAdded: populatedPost });
@@ -190,7 +192,7 @@ const resolvers = {
       const isOwner = context.currentUser.id === post.owner.toString();
 
       if (!isMod && !isOwner) {
-        throw new GraphQLError("must be owner to delete", {
+        throw new GraphQLError("no permission to delete post", {
           extensions: { code: "FORBIDDEN" },
         });
       }
@@ -238,7 +240,6 @@ const resolvers = {
         let inc = {};
         let finalUserVote = null;
 
-        // vote doesn't exist -> add vote
         if (!existingVote) {
           const vote = new Vote({
             user: context.currentUser.id,
@@ -250,18 +251,12 @@ const resolvers = {
 
           inc[fieldFor(args.value)] = 1;
           finalUserVote = args.value;
-        }
-
-        // same vote value -> remove vote
-        else if (existingVote.value === args.value) {
+        } else if (existingVote.value === args.value) {
           await existingVote.deleteOne({ session });
 
           inc[fieldFor(args.value)] = -1;
           finalUserVote = null;
-        }
-
-        // opposite vote value -> switch vote
-        else {
+        } else {
           const prevValue = existingVote.value;
           existingVote.value = args.value;
 
@@ -317,12 +312,10 @@ const resolvers = {
     userVote: async (root, args, context) => {
       if (!context.currentUser) return null;
 
-      const vote = await Vote.findOne({
-        post: root.id,
-        user: context.currentUser.id,
+      return context.voteLoader.load({
+        postId: root.id,
+        userId: context.currentUser.id,
       });
-
-      return vote ? vote.value : null;
     },
   },
 };
