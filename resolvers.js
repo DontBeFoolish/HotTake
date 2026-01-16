@@ -11,7 +11,7 @@ const pubsub = new PubSub();
 
 const resolvers = {
   Query: {
-    allPosts: async (root, args) => {
+    allPosts: async (root, args, context) => {
       const limit = 20;
       const query = { deleted: false };
 
@@ -26,6 +26,18 @@ const resolvers = {
 
       const hasMore = posts.length > limit;
       const sliced = hasMore ? posts.slice(0, limit) : posts;
+
+      if (context.currentUser) {
+        const votes = await Vote.find({
+          user: context.currentUser.id,
+          post: { $in: sliced.map((p) => p._id) },
+        });
+
+        const voteMap = new Map(votes.map((v) => [v.post.toString(), v.value]));
+        sliced.forEach((post) => {
+          post.userVote = voteMap.get(post._id.toString()) || null;
+        });
+      }
 
       return {
         posts: sliced,
@@ -309,14 +321,7 @@ const resolvers = {
       if (agree === 0 && disagree === 0) return null;
       return Math.min(agree, disagree) / Math.max(agree, disagree);
     },
-    userVote: async (root, args, context) => {
-      if (!context.currentUser) return null;
-
-      return context.voteLoader.load({
-        postId: root.id,
-        userId: context.currentUser.id,
-      });
-    },
+    userVote: async (root) => root.userVote ?? null,
   },
 };
 

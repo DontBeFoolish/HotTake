@@ -11,8 +11,6 @@ const cors = require("cors");
 const { makeExecutableSchema } = require("@graphql-tools/schema");
 const jwt = require("jsonwebtoken");
 
-const createVoteLoader = require("./loaders/voteLoader");
-
 const typeDefs = require("./schema");
 const resolvers = require("./resolvers");
 const User = require("./models/user");
@@ -24,7 +22,7 @@ const getUserFromAuthHeader = async (auth) => {
 
   try {
     const decodedToken = jwt.verify(auth.substring(7), process.env.JWT_SECRET);
-    return User.findById(decodedToken.id);
+    return await User.findById(decodedToken.id);
   } catch {
     return null;
   }
@@ -68,7 +66,7 @@ const startServer = async (port) => {
       context: async ({ req }) => {
         const auth = req.headers.authorization;
         const currentUser = await getUserFromAuthHeader(auth);
-        return { currentUser, voteLoader: createVoteLoader() };
+        return { currentUser };
       },
     }),
   );
