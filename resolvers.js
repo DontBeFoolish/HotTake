@@ -2,6 +2,17 @@ const { GraphQLError } = require("graphql");
 const { PubSub } = require("graphql-subscriptions");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
+const {
+  requireStaff,
+  requireAdmin,
+  requireOwner,
+  requireExists,
+  requireCreated,
+  requireAuth,
+  requireOwnerOrStaff,
+  requireValidVote,
+  isModerator,
+} = require("./permissions");
 
 const Post = require("./models/post");
 const User = require("./models/user");
@@ -73,21 +84,13 @@ const resolvers = {
       }).populate("owner");
     },
     allUsers: async (root, args, context) => {
-      if (context.currentUser?.role !== "ADMIN") {
-        throw new GraphQLError("not authorized", {
-          extensions: { code: "FORBIDDEN" },
-        });
-      }
+      requireStaff(context);
       return User.find({});
     },
     findUser: async (root, args) => User.findOne({ username: args.username }),
     me: (root, args, context) => context.currentUser,
     allModMessages: async (root, args, context) => {
-      if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
-        throw new GraphQLError("not authorized", {
-          extensions: { code: "FORBIDDEN" },
-        });
-      }
+      requireStaff(context);
 
       const limit = 20;
       const query = { deleted: false };
@@ -142,30 +145,24 @@ const resolvers = {
         passwordHash: hashedPassword,
       });
 
-      return newUser.save().catch((error) => {
-        throw new GraphQLError("failed to save user", {
-          extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
-        });
-      });
+      return newUser.save();
     },
     setUserRole: async (root, args, context) => {
-      if (context.currentUser?.role !== "ADMIN") {
-        throw new GraphQLError("not authorized", {
-          extensions: { code: "FORBIDDEN" },
-        });
-      }
+      requireAdmin(context);
 
       const user = await User.findById(args.userId);
-      if (!user) {
-        throw new GraphQLError("invalid user id", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
+      requireExists(user);
 
       user.role = args.role;
       return user.save();
     },
-    login: async (root, args) => {
+    login: async (root, args, context) => {
+      if (context.currentUser) {
+        throw new GraphQLError("already signed in", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
       const user = await User.findOne({ username: args.username }).select(
         "+passwordHash",
       );
@@ -186,24 +183,15 @@ const resolvers = {
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) };
     },
     addPost: async (root, args, context) => {
-      if (!context.currentUser) {
-        throw new GraphQLError("must be logged in to create post", {
-          extensions: { code: "UNAUTHENTICATED" },
-        });
-      }
+      const user = requireAuth(context);
 
       const newPost = new Post({
         content: args.content,
-        owner: context.currentUser.id,
+        owner: user.id,
       });
 
       const savedPost = await newPost.save();
-
-      if (!savedPost) {
-        throw new GraphQLError("failed to create post", {
-          extensions: { code: "INTERNAL_SERVER_ERROR", error: error.message },
-        });
-      }
+      requireCreated(savedPost);
 
       const populatedPost = await savedPost.populate("owner");
 
@@ -211,47 +199,22 @@ const resolvers = {
       return populatedPost;
     },
     removePost: async (root, args, context) => {
-      if (!context.currentUser) {
-        throw new GraphQLError("no authentication", {
-          extensions: { code: "UNAUTHENTICATED" },
-        });
-      }
+      requireAuth(context);
 
       const post = await Post.findOne({
         _id: args.postId,
         deleted: false,
       });
 
-      if (!post) {
-        throw new GraphQLError("post not found", {
-          extensions: { code: "NOT_FOUND" },
-        });
-      }
-
-      const isMod = ["MODERATOR", "ADMIN"].includes(context.currentUser.role);
-      const isOwner = context.currentUser.id === post.owner.toString();
-
-      if (!isMod && !isOwner) {
-        throw new GraphQLError("no permission to delete post", {
-          extensions: { code: "FORBIDDEN" },
-        });
-      }
+      requireExists(post);
+      requireOwnerOrStaff(context, post);
 
       post.deleted = true;
       return post.save();
     },
     addVote: async (root, args, context) => {
-      if (!context.currentUser) {
-        throw new GraphQLError("no authentication", {
-          extensions: { code: "UNAUTHENTICATED" },
-        });
-      }
-
-      if (args.value !== "AGREE" && args.value !== "DISAGREE") {
-        throw new GraphQLError("invalid vote value", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
+      requireAuth(context);
+      requireValidVote(args);
 
       const session = await Vote.startSession();
 
@@ -263,11 +226,7 @@ const resolvers = {
           deleted: false,
         }).session(session);
 
-        if (!post) {
-          throw new GraphQLError("post not found", {
-            extensions: { code: "NOT_FOUND" },
-          });
-        }
+        requireExists(post);
 
         const existingVote = await Vote.findOne({
           user: context.currentUser.id,
@@ -313,11 +272,7 @@ const resolvers = {
           { new: true, session },
         ).populate("owner");
 
-        if (!updatedPost) {
-          throw new GraphQLError("post does not exist", {
-            extensions: { code: "NOT_FOUND" },
-          });
-        }
+        requireExists(updatedPost);
 
         await session.commitTransaction();
 
@@ -338,11 +293,7 @@ const resolvers = {
       }
     },
     addModMessage: async (root, args, context) => {
-      if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
-        throw new GraphQLError("not authorized", {
-          extensions: { code: "FORBIDDEN" },
-        });
-      }
+      requireStaff(context);
 
       const newMessage = new ModMessage({
         content: args.content,
@@ -351,12 +302,7 @@ const resolvers = {
       });
 
       const savedMessage = await newMessage.save();
-
-      if (!savedMessage) {
-        throw new GraphQLError("failed to create message", {
-          extensions: { code: "INTERNAL_SERVER_ERROR" },
-        });
-      }
+      requireCreated(savedMessage);
 
       const populatedMessage = await savedMessage.populate("user");
 
@@ -371,33 +317,17 @@ const resolvers = {
       return populatedMessage;
     },
     removeModMessage: async (root, args, context) => {
-      console.log(context.currentUser);
-      if (!context.currentUser) {
-        throw new GraphQLError("not authenticated", {
-          extensions: { code: "UNAUTHENTICATED" },
-        });
+      requireStaff(context);
+
+      const messageToDelete = await ModMessage.findById(args.messageId);
+      requireExists(messageToDelete);
+
+      if (isModerator(context)) {
+        requireOwner(context, messageToDelete);
       }
 
-      const message = await ModMessage.findById(args.messageId);
-
-      if (!message) {
-        throw new GraphQLError("message not found", {
-          extensions: { code: "NOT_FOUND" },
-        });
-      }
-
-      if (
-        context.currentUser.role === "MODERATOR" &&
-        message.user.toString() !== context.currentUser.id
-      ) {
-        throw new GraphQLError(
-          "moderators may only delete their own messages",
-          { extensions: { code: "FORBIDDEN" } },
-        );
-      }
-
-      message.deleted = true;
-      const deletedMessage = await message.save();
+      messageToDelete.deleted = true;
+      const deletedMessage = await messageToDelete.save();
 
       pubsub.publish("MOD_MESSAGE", {
         modMessage: {
@@ -416,12 +346,7 @@ const resolvers = {
     },
     modMessage: {
       subscribe: (root, args, context) => {
-        if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
-          throw new GraphQLError("not authorized", {
-            extensions: { code: "FORBIDDEN" },
-          });
-        }
-
+        requireStaff(context);
         return pubsub.asyncIterableIterator("MOD_MESSAGE");
       },
     },
