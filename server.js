@@ -7,8 +7,9 @@ const {
   ApolloServerPluginDrainHttpServer,
 } = require("@apollo/server/plugin/drainHttpServer");
 const { expressMiddleware } = require("@as-integrations/express5");
-const cors = require("cors");
 const { makeExecutableSchema } = require("@graphql-tools/schema");
+const rateLimit = require("express-rate-limit");
+const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
 const typeDefs = require("./schema");
@@ -27,6 +28,13 @@ const getUserFromAuthHeader = async (auth) => {
     return null;
   }
 };
+
+const limiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const startServer = async (port) => {
   const app = express();
@@ -72,6 +80,7 @@ const startServer = async (port) => {
     "/",
     cors(),
     express.json(),
+    limiter,
     expressMiddleware(server, {
       context: async ({ req }) => {
         const auth = req.headers.authorization;
