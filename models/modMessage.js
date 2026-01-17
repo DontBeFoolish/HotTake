@@ -4,6 +4,7 @@ const schema = mongoose.Schema({
   content: {
     type: String,
     required: true,
+    maxlength: 200,
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,

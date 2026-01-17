@@ -5,7 +5,7 @@ const schema = mongoose.Schema({
     type: String,
     required: true,
     minlength: 4,
-    maxlength: 24,
+    maxlength: 20,
   },
   passwordHash: {
     type: String,

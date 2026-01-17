@@ -36,6 +36,16 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
+const corsOptions = {
+  origin:
+    process.env.NODE_ENV === "production"
+      ? process.env.ALLOWED_ORIGINS?.split(",")
+      : "*",
+  credentials: true,
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
 const startServer = async (port) => {
   const app = express();
   const httpServer = http.createServer(app);
@@ -78,7 +88,7 @@ const startServer = async (port) => {
 
   app.use(
     "/",
-    cors(),
+    cors(corsOptions),
     express.json(),
     limiter,
     expressMiddleware(server, {

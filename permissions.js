@@ -74,16 +74,6 @@ const requireCreated = (result, message = "operation failed") => {
   return result;
 };
 
-// USER INPUT
-
-const requireValidVote = (args, message = "invalid vote type") => {
-  if (!["AGREE", "DISAGREE"].includes(args.value)) {
-    throw new GraphQLError(message, {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-};
-
 module.exports = {
   requireStaff,
   requireExists,
@@ -92,7 +82,6 @@ module.exports = {
   requireAdmin,
   requireAuth,
   requireOwnerOrStaff,
-  requireValidVote,
   isAdmin,
   isModerator,
   isOwner,

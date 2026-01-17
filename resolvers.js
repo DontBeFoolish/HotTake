@@ -10,9 +10,14 @@ const {
   requireCreated,
   requireAuth,
   requireOwnerOrStaff,
-  requireValidVote,
   isModerator,
 } = require("./permissions");
+const {
+  validateVote,
+  validateNewUser,
+  validateContent,
+  validateObjectId,
+} = require("./validators");
 
 const Post = require("./models/post");
 const User = require("./models/user");
@@ -28,6 +33,7 @@ const resolvers = {
       const query = { deleted: false };
 
       if (args.after) {
+        validateObjectId(args.after);
         query._id = { $lt: args.after };
       }
 
@@ -57,10 +63,13 @@ const resolvers = {
       };
     },
     userPosts: async (root, args) => {
+      validateObjectId(args.ownerId);
+
       const limit = 20;
       const query = { deleted: false, owner: args.ownerId };
 
       if (args.after) {
+        validateObjectId(args.after);
         query._id = { $lt: args.after };
       }
 
@@ -78,6 +87,8 @@ const resolvers = {
       };
     },
     findPost: async (root, args) => {
+      validateObjectId(args.postId);
+
       return Post.findOne({
         _id: args.postId,
         deleted: false,
@@ -96,6 +107,7 @@ const resolvers = {
       const query = { deleted: false };
 
       if (args.after) {
+        validateObjectId(args.after);
         query._id = { $lt: args.after };
       }
 
@@ -122,21 +134,7 @@ const resolvers = {
       return true;
     },
     addUser: async (root, args) => {
-      if (await User.findOne({ username: args.username }, { _id: 1 })) {
-        throw new GraphQLError("username already exists", {
-          extensions: { code: "BAD_USER_INPUT", invalidArgs: args.username },
-        });
-      }
-
-      const PASSWORD_REGEX =
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[^\s]{12,}$/;
-
-      if (!PASSWORD_REGEX.test(args.password)) {
-        throw new GraphQLError(
-          "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol",
-          { extensions: { code: "BAD_USER_INPUT" } },
-        );
-      }
+      validateNewUser(args);
 
       const hashedPassword = await bcryptjs.hash(args.password, 10);
 
@@ -149,6 +147,7 @@ const resolvers = {
     },
     setUserRole: async (root, args, context) => {
       requireAdmin(context);
+      validateObjectId(args.userId);
 
       const user = await User.findById(args.userId);
       requireExists(user);
@@ -166,6 +165,7 @@ const resolvers = {
       const user = await User.findOne({ username: args.username }).select(
         "+passwordHash",
       );
+
       if (
         !user ||
         !(await bcryptjs.compare(args.password, user.passwordHash))
@@ -185,6 +185,8 @@ const resolvers = {
     addPost: async (root, args, context) => {
       const user = requireAuth(context);
 
+      validateContent(args);
+
       const newPost = new Post({
         content: args.content,
         owner: user.id,
@@ -200,6 +202,7 @@ const resolvers = {
     },
     removePost: async (root, args, context) => {
       requireAuth(context);
+      validateObjectId(args.postId);
 
       const post = await Post.findOne({
         _id: args.postId,
@@ -214,7 +217,8 @@ const resolvers = {
     },
     addVote: async (root, args, context) => {
       requireAuth(context);
-      requireValidVote(args);
+      validateObjectId(args.postId);
+      validateVote(args);
 
       const session = await Vote.startSession();
 
@@ -294,6 +298,7 @@ const resolvers = {
     },
     addModMessage: async (root, args, context) => {
       requireStaff(context);
+      validateContent(args);
 
       const newMessage = new ModMessage({
         content: args.content,
@@ -318,6 +323,7 @@ const resolvers = {
     },
     removeModMessage: async (root, args, context) => {
       requireStaff(context);
+      validateObjectId(args.messageId);
 
       const messageToDelete = await ModMessage.findById(args.messageId);
       requireExists(messageToDelete);
