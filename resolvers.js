@@ -7,7 +7,6 @@ const Post = require("./models/post");
 const User = require("./models/user");
 const Vote = require("./models/vote");
 const ModMessage = require("./models/modMessage");
-const modMessage = require("./models/modMessage");
 
 const pubsub = new PubSub();
 
