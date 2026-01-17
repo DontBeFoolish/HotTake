@@ -43,17 +43,17 @@ const typeDefs = /* GraphQL */ `
     id: ID!
   }
 
+  type PostConnection {
+    posts: [Post!]!
+    nextCursor: ID
+  }
+
   type Vote {
     user: User!
     post: Post!
     value: VoteValue!
     createdAt: String!
     id: ID!
-  }
-
-  type PostConnection {
-    posts: [Post!]!
-    nextCursor: ID
   }
 
   type ModMessage {
@@ -65,6 +65,22 @@ const typeDefs = /* GraphQL */ `
     id: ID!
   }
 
+  type ModMessageConnection {
+    messages: [ModMessage!]!
+    nextCursor: ID
+  }
+
+  enum ModMessageEventType {
+    ADDED
+    REMOVED
+  }
+
+  type ModMessageEvent {
+    type: ModMessageEventType!
+    message: ModMessage
+    messageId: ID
+  }
+
   type Query {
     allPosts(after: ID): PostConnection!
     userPosts(ownerId: ID!, after: ID): PostConnection!
@@ -72,6 +88,7 @@ const typeDefs = /* GraphQL */ `
     allUsers: [User!]!
     findUser(username: String!): User
     me: User
+    allModMessages(after: ID): ModMessageConnection!
   }
 
   type Mutation {
@@ -82,13 +99,13 @@ const typeDefs = /* GraphQL */ `
     removePost(postId: ID!): Post
     addVote(postId: ID!, value: VoteValue!): Post
     addModMessage(content: String!): ModMessage
-    removeModMessage(messsageId: ID!): ModMessage
+    removeModMessage(messageId: ID!): ModMessage
     clearDb: Boolean
   }
 
   type Subscription {
-    postAdded: Post
-    modMessageAdded: ModMessage
+    postAdded: Post!
+    modMessage: ModMessageEvent!
   }
 `;
 

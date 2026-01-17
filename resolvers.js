@@ -82,6 +82,33 @@ const resolvers = {
     },
     findUser: async (root, args) => User.findOne({ username: args.username }),
     me: (root, args, context) => context.currentUser,
+    allModMessages: async (root, args, context) => {
+      if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
+        throw new GraphQLError("not authorized", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      const limit = 20;
+      const query = { deleted: false };
+
+      if (args.after) {
+        query._id = { $lt: args.after };
+      }
+
+      const messages = await ModMessage.find(query)
+        .sort({ _id: -1 })
+        .limit(limit + 1)
+        .populate("user");
+
+      const hasMore = messages.length > limit;
+      const sliced = hasMore ? messages.slice(0, limit) : messages;
+
+      return {
+        messages: sliced,
+        nextCursor: hasMore ? sliced[sliced.length - 1]._id : null,
+      };
+    },
   },
   Mutation: {
     clearDb: async () => {
@@ -333,17 +360,61 @@ const resolvers = {
 
       const populatedMessage = await savedMessage.populate("user");
 
-      pubsub.publish("MOD_MESSAGE_ADDED", {
-        modMessageAdded: populatedMessage,
+      pubsub.publish("MOD_MESSAGE", {
+        modMessage: {
+          type: "ADDED",
+          message: populatedMessage,
+          messageId: null,
+        },
       });
+
       return populatedMessage;
+    },
+    removeModMessage: async (root, args, context) => {
+      console.log(context.currentUser);
+      if (!context.currentUser) {
+        throw new GraphQLError("not authenticated", {
+          extensions: { code: "UNAUTHENTICATED" },
+        });
+      }
+
+      const message = await ModMessage.findById(args.messageId);
+
+      if (!message) {
+        throw new GraphQLError("message not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      if (
+        context.currentUser.role === "MODERATOR" &&
+        message.user.toString() !== context.currentUser.id
+      ) {
+        throw new GraphQLError(
+          "moderators may only delete their own messages",
+          { extensions: { code: "FORBIDDEN" } },
+        );
+      }
+
+      message.deleted = true;
+      const deletedMessage = await message.save();
+
+      pubsub.publish("MOD_MESSAGE", {
+        modMessage: {
+          type: "REMOVED",
+          message: null,
+          messageId: deletedMessage.id,
+        },
+      });
+
+      return deletedMessage;
     },
   },
   Subscription: {
     postAdded: {
       subscribe: () => pubsub.asyncIterableIterator("POST_ADDED"),
     },
-    modMessageAdded: {
+    modMessage: {
       subscribe: (root, args, context) => {
         if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
           throw new GraphQLError("not authorized", {
@@ -351,7 +422,7 @@ const resolvers = {
           });
         }
 
-        return pubsub.asyncIterableIterator("MOD_MESSAGE_ADDED");
+        return pubsub.asyncIterableIterator("MOD_MESSAGE");
       },
     },
   },
