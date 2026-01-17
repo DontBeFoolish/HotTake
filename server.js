@@ -38,7 +38,17 @@ const startServer = async (port) => {
   });
 
   const schema = makeExecutableSchema({ typeDefs, resolvers });
-  const serverCleanup = useServer({ schema }, wsServer);
+  const serverCleanup = useServer(
+    {
+      schema,
+      context: async (ctx) => {
+        const auth = ctx.connectionParams?.authorization;
+        const currentUser = await getUserFromAuthHeader(auth);
+        return { currentUser };
+      },
+    },
+    wsServer,
+  );
 
   const server = new ApolloServer({
     schema,

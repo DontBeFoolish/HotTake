@@ -6,6 +6,8 @@ const bcryptjs = require("bcryptjs");
 const Post = require("./models/post");
 const User = require("./models/user");
 const Vote = require("./models/vote");
+const ModMessage = require("./models/modMessage");
+const modMessage = require("./models/modMessage");
 
 const pubsub = new PubSub();
 
@@ -309,10 +311,49 @@ const resolvers = {
         session.endSession();
       }
     },
+    addModMessage: async (root, args, context) => {
+      if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
+        throw new GraphQLError("not authorized", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      const newMessage = new ModMessage({
+        content: args.content,
+        user: context.currentUser.id,
+        role: context.currentUser.role,
+      });
+
+      const savedMessage = await newMessage.save();
+
+      if (!savedMessage) {
+        throw new GraphQLError("failed to create message", {
+          extensions: { code: "INTERNAL_SERVER_ERROR" },
+        });
+      }
+
+      const populatedMessage = await savedMessage.populate("user");
+
+      pubsub.publish("MOD_MESSAGE_ADDED", {
+        modMessageAdded: populatedMessage,
+      });
+      return populatedMessage;
+    },
   },
   Subscription: {
     postAdded: {
       subscribe: () => pubsub.asyncIterableIterator("POST_ADDED"),
+    },
+    modMessageAdded: {
+      subscribe: (root, args, context) => {
+        if (!["ADMIN", "MODERATOR"].includes(context.currentUser?.role)) {
+          throw new GraphQLError("not authorized", {
+            extensions: { code: "FORBIDDEN" },
+          });
+        }
+
+        return pubsub.asyncIterableIterator("MOD_MESSAGE_ADDED");
+      },
     },
   },
   Post: {

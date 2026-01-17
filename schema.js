@@ -5,6 +5,11 @@ const typeDefs = /* GraphQL */ `
     ADMIN
   }
 
+  enum AuthRole {
+    MODERATOR
+    ADMIN
+  }
+
   enum VoteValue {
     AGREE
     DISAGREE
@@ -43,11 +48,21 @@ const typeDefs = /* GraphQL */ `
     post: Post!
     value: VoteValue!
     createdAt: String!
+    id: ID!
   }
 
   type PostConnection {
     posts: [Post!]!
     nextCursor: ID
+  }
+
+  type ModMessage {
+    content: String!
+    user: User!
+    role: AuthRole!
+    createdAt: String!
+    deleted: Boolean!
+    id: ID!
   }
 
   type Query {
@@ -66,11 +81,14 @@ const typeDefs = /* GraphQL */ `
     addPost(content: String!): Post
     removePost(postId: ID!): Post
     addVote(postId: ID!, value: VoteValue!): Post
+    addModMessage(content: String!): ModMessage
+    removeModMessage(messsageId: ID!): ModMessage
     clearDb: Boolean
   }
 
   type Subscription {
     postAdded: Post
+    modMessageAdded: ModMessage
   }
 `;
 
