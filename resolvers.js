@@ -17,6 +17,7 @@ const {
   validateNewUser,
   validateContent,
   validateObjectId,
+  validateRole,
 } = require("./validators");
 
 const Post = require("./models/post");
@@ -62,7 +63,7 @@ const resolvers = {
         nextCursor: hasMore ? sliced[sliced.length - 1]._id : null,
       };
     },
-    userPosts: async (root, args) => {
+    userPosts: async (root, args, context) => {
       validateObjectId(args.ownerId);
 
       const limit = 20;
@@ -81,6 +82,18 @@ const resolvers = {
       const hasMore = posts.length > limit;
       const sliced = hasMore ? posts.slice(0, limit) : posts;
 
+      if (context.currentUser) {
+        const votes = await Vote.find({
+          owner: context.currentUser.id,
+          post: { $in: sliced.map((p) => p._id) },
+        });
+
+        const voteMap = new Map(votes.map((v) => [v.post.toString(), v.value]));
+          sliced.forEach((post) => {
+            post.userVote = voteMap.get(post._id.toString()) || null;
+        });
+      }
+
       return {
         posts: sliced,
         nextCursor: hasMore ? sliced[sliced.length - 1]._id : null,
@@ -95,13 +108,13 @@ const resolvers = {
       }).populate("owner");
     },
     allUsers: async (root, args, context) => {
-      requireStaff(context);
-      return User.find({});
+      requireStaff(context.currentUser);
+      User.find({});
     },
     findUser: async (root, args) => User.findOne({ username: args.username }),
     me: (root, args, context) => context.currentUser,
     allModMessages: async (root, args, context) => {
-      requireStaff(context);
+      requireStaff(context.currentUser);
 
       const limit = 20;
       const query = { deleted: false };
@@ -126,7 +139,9 @@ const resolvers = {
     },
   },
   Mutation: {
-    clearDb: async () => {
+    clearDb: async (root, args, context) => {
+      requireAdmin(context.currentUser)
+      
       await Post.deleteMany({});
       await User.deleteMany({});
       await Vote.deleteMany({});
@@ -134,22 +149,26 @@ const resolvers = {
       return true;
     },
     addUser: async (root, args) => {
-      const exists= await User.findOne({ username: args.username }, { _id: 1 })
-      
-      validateNewUser(args, exists);
+      const trimmedUsername = args.username.trim()
+      const trimmedPassword = args.password.trim()
 
-      const hashedPassword = await bcryptjs.hash(args.password, 10);
+      const exists = await User.findOne({ username: trimmedUsername }, { _id: 1 })
+
+      validateNewUser({ username: trimmedUsername, password: trimmedPassword }, exists);
+
+      const hashedPassword = await bcryptjs.hash(trimmedPassword, 10);
 
       const newUser = new User({
-        username: args.username,
+        username: trimmedUsername,
         passwordHash: hashedPassword,
       });
 
       return newUser.save();
     },
     setUserRole: async (root, args, context) => {
-      requireAdmin(context);
+      requireAdmin(context.currentUser);
       validateObjectId(args.userId);
+      validateRole(args.role);
 
       const user = await User.findById(args.userId);
       requireExists(user);
@@ -185,9 +204,9 @@ const resolvers = {
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) };
     },
     addPost: async (root, args, context) => {
-      const user = requireAuth(context);
+      const user = requireAuth(context.currentUser);
 
-      validateContent(args);
+      validateContent(args.content);
 
       const newPost = new Post({
         content: args.content,
@@ -203,7 +222,7 @@ const resolvers = {
       return populatedPost;
     },
     removePost: async (root, args, context) => {
-      requireAuth(context);
+      requireAuth(context.currentUser);
       validateObjectId(args.postId);
 
       const post = await Post.findOne({
@@ -212,15 +231,15 @@ const resolvers = {
       });
 
       requireExists(post);
-      requireOwnerOrStaff(context, post);
+      requireOwnerOrStaff(context.currentUser, post);
 
       post.deleted = true;
       return post.save();
     },
-    addVote: async (root, args, context) => {
-      requireAuth(context);
+    addVote: async (root, args, context) => { // requires refactor
+      requireAuth(context.currentUser);
       validateObjectId(args.postId);
-      validateVote(args);
+      validateVote(args.value);
 
       const session = await Vote.startSession();
 
@@ -272,13 +291,13 @@ const resolvers = {
           finalUserVote = args.value;
         }
 
-        const updatedPost = await Post.findByIdAndUpdate(
+        const updatedPost = await Post.findOneAndUpdate(
           { _id: args.postId, deleted: false },
           { $inc: inc },
           { new: true, session },
         ).populate("owner");
 
-        requireExists(updatedPost);
+        requireExists(updatedPost)
 
         await session.commitTransaction();
 
@@ -299,8 +318,8 @@ const resolvers = {
       }
     },
     addModMessage: async (root, args, context) => {
-      requireStaff(context);
-      validateContent(args);
+      requireStaff(context.currentUser);
+      validateContent(args.content);
 
       const newMessage = new ModMessage({
         content: args.content,
@@ -324,14 +343,14 @@ const resolvers = {
       return populatedMessage;
     },
     removeModMessage: async (root, args, context) => {
-      requireStaff(context);
+      requireStaff(context.currentUser);
       validateObjectId(args.messageId);
 
       const messageToDelete = await ModMessage.findById(args.messageId);
       requireExists(messageToDelete);
 
       if (isModerator(context.currentUser)) {
-        requireOwner(context, messageToDelete);
+        requireOwner(context.currentUser, messageToDelete);
       }
 
       messageToDelete.deleted = true;
@@ -354,7 +373,7 @@ const resolvers = {
     },
     modMessage: {
       subscribe: (root, args, context) => {
-        requireStaff(context);
+        requireStaff(context.currentUser);
         return pubsub.asyncIterableIterator("MOD_MESSAGE");
       },
     },
@@ -365,7 +384,6 @@ const resolvers = {
       if (agree === 0 && disagree === 0) return null;
       return Math.min(agree, disagree) / Math.max(agree, disagree);
     },
-    userVote: async (root) => root.userVote ?? null,
   },
 };
 

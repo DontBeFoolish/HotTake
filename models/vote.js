@@ -22,6 +22,7 @@ const schema = mongoose.Schema({
   },
 });
 
+schema.index({ post: 1 });
 schema.index({ owner: 1, post: 1 }, { unique: true });
 
 module.exports = mongoose.model("Vote", schema);

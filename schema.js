@@ -49,7 +49,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Vote {
-    user: User!
+    owner: User!
     post: Post!
     value: VoteValue!
     createdAt: String!
@@ -58,7 +58,7 @@ const typeDefs = /* GraphQL */ `
 
   type ModMessage {
     content: String!
-    user: User!
+    owner: User!
     role: AuthRole!
     createdAt: String!
     deleted: Boolean!

@@ -1,13 +1,10 @@
 const { GraphQLError } = require("graphql");
 
-// AUTHORIZATION
-
 const isAdmin = (user) => user?.role === "ADMIN";
 const isModerator = (user) => user?.role === "MODERATOR";
 const isStaff = (user) => ["MODERATOR", "ADMIN"].includes(user?.role);
 
-const requireAuth = (context, message = "authentication required") => {
-  const user = context.currentUser;
+const requireAuth = (user, message = "authentication required") => {
   if (!user) {
     throw new GraphQLError(message, {
       extensions: { code: "UNAUTHENTICATED" },
@@ -16,8 +13,8 @@ const requireAuth = (context, message = "authentication required") => {
   return user;
 };
 
-const requireRole = (context, predicate, message = "not authorized") => {
-  const user = requireAuth(context);
+const requireRole = (user, predicate, message = "not authorized") => {
+  requireAuth(user);
   if (!predicate(user)) {
     throw new GraphQLError(message, {
       extensions: { code: "FORBIDDEN" },
@@ -25,36 +22,32 @@ const requireRole = (context, predicate, message = "not authorized") => {
   }
 };
 
-const requireAdmin = (context, message = "not authorized") => {
-  requireRole(context, isAdmin, message);
+const requireAdmin = (user, message = "not authorized") => {
+  requireRole(user, isAdmin, message);
 };
 
-const requireStaff = (context, message = "not authorized") => {
-  requireRole(context, isStaff, message);
+const requireStaff = (user, message = "not authorized") => {
+  requireRole(user, isStaff, message);
 };
 
-// OWNER CHECK
+const isOwner = (user, resource) => user.id === resource.owner.toString();
 
-const isOwner = (user, resource) => user?.id === resource?.owner.toString();
-
-const requireOwner = (context, resource, message = "not authorized") => {
-  const user = requireAuth(context);
+const requireOwner = (user, resource, message = "not authorized") => {
+  requireAuth(user);
   if (!isOwner(user, resource)) {
     throw new GraphQLError(message, { extensions: { code: "FORBIDDEN" } });
   }
   return user;
 };
 
-const requireOwnerOrStaff = (context, resource, message = "not authorized") => {
-  const user = requireAuth(context);
+const requireOwnerOrStaff = (user, resource, message = "not authorized") => {
+  requireAuth(user);
   if (!isOwner(user, resource) && !isStaff(user)) {
     throw new GraphQLError(message, {
       extensions: { code: "FORBIDDEN" },
     });
   }
 };
-
-// RESOURCE
 
 const requireExists = (resource, message = "not found") => {
   if (!resource) {
