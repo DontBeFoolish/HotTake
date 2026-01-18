@@ -1,6 +1,6 @@
 const { GraphQLError } = require("graphql");
 
-// ATHORIZATION
+// AUTHORIZATION
 
 const isAdmin = (user) => user?.role === "ADMIN";
 const isModerator = (user) => user?.role === "MODERATOR";

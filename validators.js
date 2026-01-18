@@ -10,10 +10,10 @@ const validateVote = (args, message = "invalid vote type") => {
   }
 };
 
-const validateNewUser = async (args) => {
-  if (await User.findOne({ username: args.username }, { _id: 1 })) {
+const validateNewUser = (args, exists) => {
+  if (exists) {
     throw new GraphQLError("username already exists", {
-      extensions: { code: "BAD_USER_INPUT", invalidArgs: args.username },
+      extensions: { code: "BAD_USER_INPUT" },
     });
   }
 
@@ -38,7 +38,7 @@ const validateNewUser = async (args) => {
 };
 
 const validateContent = (args) => {
-  if (args?.content?.trim().length === 0) {
+  if (args.content.trim().length < 10) {
     throw new GraphQLError("Content cannot be empty", {
       extensions: { code: "BAD_USER_INPUT" },
     });

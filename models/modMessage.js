@@ -6,7 +6,7 @@ const schema = mongoose.Schema({
     required: true,
     maxlength: 200,
   },
-  user: {
+  owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,

@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const schema = mongoose.Schema({
-  user: {
+  owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
@@ -22,6 +22,6 @@ const schema = mongoose.Schema({
   },
 });
 
-schema.index({ user: 1, post: 1 }, { unique: true });
+schema.index({ owner: 1, post: 1 }, { unique: true });
 
 module.exports = mongoose.model("Vote", schema);

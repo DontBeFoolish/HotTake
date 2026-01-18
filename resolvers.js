@@ -47,7 +47,7 @@ const resolvers = {
 
       if (context.currentUser) {
         const votes = await Vote.find({
-          user: context.currentUser.id,
+          owner: context.currentUser.id,
           post: { $in: sliced.map((p) => p._id) },
         });
 
@@ -114,7 +114,7 @@ const resolvers = {
       const messages = await ModMessage.find(query)
         .sort({ _id: -1 })
         .limit(limit + 1)
-        .populate("user");
+        .populate("owner");
 
       const hasMore = messages.length > limit;
       const sliced = hasMore ? messages.slice(0, limit) : messages;
@@ -134,7 +134,9 @@ const resolvers = {
       return true;
     },
     addUser: async (root, args) => {
-      validateNewUser(args);
+      const exists= await User.findOne({ username: args.username }, { _id: 1 })
+      
+      validateNewUser(args, exists);
 
       const hashedPassword = await bcryptjs.hash(args.password, 10);
 
@@ -233,7 +235,7 @@ const resolvers = {
         requireExists(post);
 
         const existingVote = await Vote.findOne({
-          user: context.currentUser.id,
+          owner: context.currentUser.id,
           post: post.id,
         }).session(session);
 
@@ -245,7 +247,7 @@ const resolvers = {
 
         if (!existingVote) {
           const vote = new Vote({
-            user: context.currentUser.id,
+            owner: context.currentUser.id,
             post: post.id,
             value: args.value,
           });
@@ -302,14 +304,14 @@ const resolvers = {
 
       const newMessage = new ModMessage({
         content: args.content,
-        user: context.currentUser.id,
+        owner: context.currentUser.id,
         role: context.currentUser.role,
       });
 
       const savedMessage = await newMessage.save();
       requireCreated(savedMessage);
 
-      const populatedMessage = await savedMessage.populate("user");
+      const populatedMessage = await savedMessage.populate("owner");
 
       pubsub.publish("MOD_MESSAGE", {
         modMessage: {
@@ -328,7 +330,7 @@ const resolvers = {
       const messageToDelete = await ModMessage.findById(args.messageId);
       requireExists(messageToDelete);
 
-      if (isModerator(context)) {
+      if (isModerator(context.currentUser)) {
         requireOwner(context, messageToDelete);
       }
 
