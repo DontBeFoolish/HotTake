@@ -18,9 +18,13 @@ const typeDefs = /* GraphQL */ `
   type User {
     username: String!
     role: UserRole!
+    bio: String!
     createdAt: String!
     deleted: Boolean!
     id: ID!
+    totalVotes: Int!
+    totalPosts: Int!
+    agreementRate: Float
   }
 
   type Token {
@@ -94,6 +98,7 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     addUser(username: String!, password: String!): User
     setUserRole(userId: ID!, role: UserRole!): User
+    setBio(content: String!): User
     login(username: String!, password: String!): Token
     addPost(content: String!): Post
     removePost(postId: ID!): Post

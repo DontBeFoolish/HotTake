@@ -24,6 +24,7 @@ const Post = require("./models/post");
 const User = require("./models/user");
 const Vote = require("./models/vote");
 const ModMessage = require("./models/modMessage");
+const vote = require("./models/vote");
 
 const pubsub = new PubSub();
 
@@ -112,7 +113,28 @@ const resolvers = {
       User.find({});
     },
     findUser: async (root, args) => User.findOne({ username: args.username }),
-    me: (root, args, context) => context.currentUser,
+    me: async (root, args, context) => {
+      if (!context.currentUser) return null;
+
+      const [voteCounts, totalPosts] = await Promise.all([
+        Vote.aggregate([
+          { $match: { owner: context.currentUser._id } },
+          { $group: { _id: '$value', count: { $sum: 1 } } }
+        ]),
+        Post.countDocuments({ owner: context.currentUser._id, deleted: false }),
+      ]);
+
+      const voteMap = new Map(voteCounts.map(v => [v._id, v.count]));
+      const agree = voteMap.get('AGREE') || 0;
+      const disagree = voteMap.get('DISAGREE') || 0;
+      const total = agree + disagree;
+
+      context.currentUser.totalVotes = total;
+      context.currentUser.totalPosts = totalPosts;
+      context.currentUser.agreementRate = total === 0 ? null : Math.round((agree / total) * 100);
+
+      return context.currentUser;
+    },
     allModMessages: async (root, args, context) => {
       requireStaff(context.currentUser);
 
@@ -176,6 +198,15 @@ const resolvers = {
       user.role = args.role;
       return user.save();
     },
+    setBio: async (root, args, context) => {
+      const user = requireAuth(context.currentUser);
+
+      const trimmedBio = args.content.trim()
+      validateContent(trimmedBio);
+
+      user.bio = trimmedBio;
+      return user.save()
+    },
     login: async (root, args, context) => {
       if (context.currentUser) {
         throw new GraphQLError("already signed in", {
@@ -206,10 +237,11 @@ const resolvers = {
     addPost: async (root, args, context) => {
       const user = requireAuth(context.currentUser);
 
-      validateContent(args.content);
+      const trimmedContent = args.content.trim()
+      validateContent(trimmedContent);
 
       const newPost = new Post({
-        content: args.content,
+        content: trimmedContent,
         owner: user.id,
       });
 
@@ -384,6 +416,28 @@ const resolvers = {
       if (agree === 0 && disagree === 0) return null;
       return Math.min(agree, disagree) / Math.max(agree, disagree);
     },
+  },
+  User: {
+    totalVotes: (root) => {
+      return root.totalVotes ?? Vote.countDocuments({ owner: root._id });
+    },
+    totalPosts: (root) => {
+      return root.totalPosts ?? Post.countDocuments({ owner: root._id, deleted: false });
+    },
+    agreementRate: async (root) => {
+      if (root.agreementRate !== undefined) return root.agreementRate;
+      const votes = await Vote.aggregate([
+        { $match: { owner: root._id } },
+        { $group: { _id: '$value', count: { $sum: 1 } } }
+      ]);
+
+      const voteMap = new Map(votes.map(v => [v._id, v.count]))
+      const agree = voteMap.get('AGREE') || 0;
+      const disagree = voteMap.get('DISAGREE') || 0;
+      const total = agree + disagree;
+
+      return total === 0 ? null : Math.round((agree / total) * 100)
+    }
   },
 };
 

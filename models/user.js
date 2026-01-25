@@ -17,6 +17,11 @@ const schema = mongoose.Schema({
     enum: ["USER", "MODERATOR", "ADMIN"],
     default: "USER",
   },
+    bio: {
+    type: String,
+    maxlength: 200,
+    default: "Hot takes enthusiast. Here to share opinions and spark debates."
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -25,6 +30,7 @@ const schema = mongoose.Schema({
     type: Boolean,
     default: false,
   },
+
 });
 
 schema.index({ username: 1 }, { unique: true });

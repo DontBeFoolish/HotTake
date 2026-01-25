@@ -38,15 +38,7 @@ const validateNewUser = (user, exists) => {
 };
 
 const validateContent = (content) => {
-  const trimmed = content.trim()
-
-  if (!trimmed || trimmed.length < 10) {
-    throw new GraphQLError("Content must be at least 10 characters", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
-  }
-
-  if (trimmed.length > 200) {
+  if (content.length > 200) {
     throw new GraphQLError("Content exceeds maximum length", {
       extensions: { code: "BAD_USER_INPUT" },
     });
