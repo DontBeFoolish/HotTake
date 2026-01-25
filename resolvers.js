@@ -198,14 +198,18 @@ const resolvers = {
       user.role = args.role;
       return user.save();
     },
-    setBio: async (root, args, context) => {
+    updateProfile: async (root, args, context) => {
       const user = requireAuth(context.currentUser);
 
-      const trimmedBio = args.content.trim()
+      const trimmedBio = args.content.trim();
       validateContent(trimmedBio);
 
+      const trimmedLocation = args.location.trim();
+      // implement location validation
+
       user.bio = trimmedBio;
-      return user.save()
+      user.location = trimmedLocation;
+      return user.save();
     },
     login: async (root, args, context) => {
       if (context.currentUser) {

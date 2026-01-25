@@ -22,6 +22,13 @@ const schema = mongoose.Schema({
     maxlength: 200,
     default: "Hot takes enthusiast. Here to share opinions and spark debates."
   },
+  location: {
+    type: String,
+    maxlength: 25,
+    trim: true,
+    match: /^[a-zA-Z\s,.'-]+$/,
+    default: "Narnia"
+  },
   createdAt: {
     type: Date,
     default: Date.now,

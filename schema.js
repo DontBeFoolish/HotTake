@@ -19,6 +19,7 @@ const typeDefs = /* GraphQL */ `
     username: String!
     role: UserRole!
     bio: String!
+    location: String!
     createdAt: String!
     deleted: Boolean!
     id: ID!
@@ -98,7 +99,7 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     addUser(username: String!, password: String!): User
     setUserRole(userId: ID!, role: UserRole!): User
-    setBio(content: String!): User
+    updateProfile(content: String!, location: String!): User!
     login(username: String!, password: String!): Token
     addPost(content: String!): Post
     removePost(postId: ID!): Post
