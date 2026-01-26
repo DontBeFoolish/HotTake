@@ -29,9 +29,12 @@ const validateNewUser = (user, exists) => {
   const PASSWORD_REGEX =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[^\s]{12,64}$/;
 
-  if (!PASSWORD_REGEX.test(user.password)) {
+  const RELAXED_PASSWORD_REGEX = /^(?=.*[A-Z])[^\s]{4,}$/;
+
+
+  if (!RELAXED_PASSWORD_REGEX.test(user.password)) {
     throw new GraphQLError(
-      "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol",
+      "Password must be at least 4 characters and include an uppercase letter",
       { extensions: { code: "BAD_USER_INPUT" } },
     );
   }

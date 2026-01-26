@@ -24,7 +24,6 @@ const Post = require("./models/post");
 const User = require("./models/user");
 const Vote = require("./models/vote");
 const ModMessage = require("./models/modMessage");
-const vote = require("./models/vote");
 
 const pubsub = new PubSub();
 
@@ -430,17 +429,41 @@ const resolvers = {
     },
     agreementRate: async (root) => {
       if (root.agreementRate !== undefined) return root.agreementRate;
+      
       const votes = await Vote.aggregate([
         { $match: { owner: root._id } },
         { $group: { _id: '$value', count: { $sum: 1 } } }
       ]);
 
-      const voteMap = new Map(votes.map(v => [v._id, v.count]))
+      const voteMap = new Map(votes.map(v => [v._id, v.count]));
       const agree = voteMap.get('AGREE') || 0;
       const disagree = voteMap.get('DISAGREE') || 0;
       const total = agree + disagree;
 
-      return total === 0 ? null : Math.round((agree / total) * 100)
+      return total === 0 ? null : Math.round((agree / total) * 100);
+    },
+    controversyScore: async (root) => {
+      if (root.controversyScore !== undefined) return root.controversyScore;
+      
+      const posts = await Post.find(
+        { owner: root._id, deleted: false },
+        { votes: 1 }
+      );
+
+      if (posts.length === 0) return null;
+
+      const scores = posts
+        .map(post => {
+          const { agree, disagree } = post.votes;
+          if (agree === 0 && disagree === 0) return null;
+          return Math.min(agree, disagree) / Math.max(agree, disagree);
+        })
+        .filter(score => score !== null);
+
+      if (scores.length === 0) return null;
+
+      const avgScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+      return Math.round(avgScore * 100);
     }
   },
 };

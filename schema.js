@@ -25,7 +25,8 @@ const typeDefs = /* GraphQL */ `
     id: ID!
     totalVotes: Int!
     totalPosts: Int!
-    agreementRate: Float
+    agreementRate: Int
+    controversyScore: Int
   }
 
   type Token {
